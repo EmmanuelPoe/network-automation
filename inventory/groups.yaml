@@ -1,0 +1,27 @@
+---
+cisco_ios:
+  platform: cisco_ios
+  username: admin
+  password: "{{ env.DEVICE_PASSWORD }}"
+  port: 22
+
+cisco_nxos:
+  platform: cisco_nxos
+  username: admin
+  password: "{{ env.DEVICE_PASSWORD }}"
+  port: 22
+
+core:
+  data:
+    role: core
+    backup_priority: 1
+
+distribution:
+  data:
+    role: distribution
+    backup_priority: 2
+
+access:
+  data:
+    role: access
+    backup_priority: 3

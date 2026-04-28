@@ -1,0 +1,32 @@
+---
+checks:
+  - name: NTP configured
+    command: show running-config | include ntp
+    must_contain:
+      - "ntp server"
+
+  - name: SSH version 2
+    command: show running-config | include ip ssh
+    must_contain:
+      - "ip ssh version 2"
+
+  - name: Telnet disabled
+    command: show line vty 0 4
+    must_not_contain:
+      - "transport input telnet"
+
+  - name: Login banner present
+    command: show running-config | include banner
+    must_contain:
+      - "banner login"
+
+  - name: Password encryption enabled
+    command: show running-config | include service password
+    must_contain:
+      - "service password-encryption"
+
+  - name: SNMP community strings
+    command: show running-config | include snmp-server community
+    must_not_contain:
+      - "snmp-server community public"
+      - "snmp-server community private"
