@@ -1,14 +1,12 @@
 ---
+# Credentials are NOT stored here. scripts/common.py sets username/password on
+# every host at runtime from DEVICE_USERNAME / DEVICE_PASSWORD (or a prompt).
 cisco_ios:
   platform: cisco_ios
-  username: admin
-  password: "{{ env.DEVICE_PASSWORD }}"
   port: 22
 
 cisco_nxos:
   platform: cisco_nxos
-  username: admin
-  password: "{{ env.DEVICE_PASSWORD }}"
   port: 22
 
 core:
