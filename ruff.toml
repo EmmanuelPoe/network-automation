@@ -1,0 +1,10 @@
+line-length = 110
+
+[lint]
+select = ["E", "F", "I", "B"]
+
+[lint.isort]
+known-first-party = ["common", "backup_configs", "compliance_check"]
+
+[lint.per-file-ignores]
+"tests/*" = ["E402"]

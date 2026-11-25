@@ -1,42 +1,41 @@
 # Testing
 
-There are no tests and no CI. Use these layers, cheapest first.
-
-## 1. Static checks
-
 ```bash
-pip install ruff
-ruff check scripts && ruff format --check scripts
-python -c "import yaml,sys; [yaml.safe_load(open(f)) for f in sys.argv[1:]]" config.yaml inventory/*.yaml templates/*.yaml
+pip install -r requirements-dev.txt
+pytest -q                                          # 6 tests, offline
+ruff check scripts tests && ruff format --check scripts tests
 ```
 
-## 2. Config loads (no devices needed)
+CI (`.github/workflows/ci.yml`, Python 3.11) runs the same three commands on every pull request and push to `main`.
 
-```bash
-python -c "from nornir import InitNornir; nr = InitNornir(config_file='config.yaml'); print(list(nr.inventory.hosts))"
-```
+## What `tests/test_scripts.py` covers
 
-This currently fails with the Nornir 2 config error described in CLAUDE.md; it should print the four host names once fixed.
+| Test | Checks |
+|---|---|
+| `test_config_loads_inventory_from_any_directory` | Nornir 3 config loads from a different working directory; hosts, platforms and role data are correct |
+| `test_credentials_are_injected_not_templated` | every host gets the runtime credentials |
+| `test_get_credentials_from_environment` | `DEVICE_USERNAME` / `DEVICE_PASSWORD` are read |
+| `test_evaluate_must_contain_and_must_not_contain` | the policy matching rules |
+| `test_compliance_run_and_report` | full Nornir run with mocked Netmiko: compliant output → no violations; `snmp-server community public` → one violation per host; CSV columns |
+| `test_backup_writes_timestamped_file` | backup task writes `<host>/<host>_<timestamp>.cfg` with the device output |
 
-## 3. Unit tests without devices (recommended to add)
+## How mocking works
 
-Mock `netmiko_send_command` so tasks run offline. A minimal pattern with pytest:
+Each script imports `netmiko_send_command` into its own module, so tests replace it there:
 
 ```python
 from nornir.core.task import Result
 
-def fake_send(task, command_string, **_):
-    outputs = {"show running-config | include ip ssh": "ip ssh version 2"}
-    return Result(host=task.host, result=outputs.get(command_string, ""))
+def fake_send(outputs):
+    def _send(task, command_string, **_):
+        return Result(host=task.host, result=outputs.get(command_string, ""))
+    return _send
 
-def test_ssh_v2_passes(monkeypatch, nr):           # nr = fixture building InitNornir from a tmp inventory
-    import scripts.compliance_check as cc
-    monkeypatch.setattr(cc, "netmiko_send_command", fake_send)
-    ...
+monkeypatch.setattr(compliance_check, "netmiko_send_command", fake_send({...}))
 ```
 
-Good first tests: `must_contain`/`must_not_contain` logic in `check_compliance`, CSV columns, and the backup file naming.
+Build Nornir with `common.init_nornir(credentials=("lab-user", "lab-pass"))` so no prompt appears.
 
-## 4. Against lab devices
+## Against lab devices
 
-Use Cisco DevNet sandboxes, CML or containerlab images, with a separate inventory file. Never point tests at production devices.
+Use Cisco DevNet sandboxes, CML or containerlab images with a separate inventory file. Never point tests or ad-hoc runs at production devices.

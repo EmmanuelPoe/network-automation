@@ -4,53 +4,45 @@ Guidance for AI agents working in this repository. Read this first, then the mat
 
 ## What this is
 
-Python CLI scripts that use **Nornir 3 + Netmiko** to run commands against Cisco IOS/NX-OS devices listed in a YAML inventory:
+Python CLI scripts that use **Nornir 3 + Netmiko** to run read-only commands against Cisco IOS/NX-OS devices listed in a YAML inventory:
 
 - `scripts/backup_configs.py` — `show running-config` on every host, saved to `backups/<host>/<host>_<timestamp>.cfg`
-- `scripts/compliance_check.py` — runs the checks in `templates/baseline_policy.yaml`, writes violations to `reports/compliance.csv` (or the path given as the first positional argument) and prints a Rich table
-
-**The README overstates the repo.** `scripts/push_config.py`, `scripts/interface_report.py` and `templates/ntp_config.j2` do not exist, and `compliance_check.py` takes a positional path, not `--report`.
-
-## Known blockers — the scripts do not run as committed
-
-1. `config.yaml` is in **Nornir 2 format**. With Nornir 3 (`nornir>=3.4.0`), `InitNornir(config_file="config.yaml")` raises `TypeError: CoreConfig.__init__() got an unexpected keyword argument 'num_workers'`. Nornir 3 needs:
-   ```yaml
-   runner:
-     plugin: threaded
-     options: {num_workers: 10}
-   inventory:
-     plugin: SimpleInventory
-     options: {host_file: inventory/hosts.yaml, group_file: inventory/groups.yaml}
-   ```
-2. `inventory/groups.yaml` sets `password: "{{ env.DEVICE_PASSWORD }}"`. SimpleInventory does not render templates, so Netmiko receives that literal string. Set the password at runtime instead (see [docs/security.md](docs/security.md)).
+- `scripts/compliance_check.py` — runs the checks in `templates/baseline_policy.yaml`, writes violations to `--report` (default `reports/compliance.csv`) and prints a Rich table
+- `scripts/common.py` — shared `init_nornir()`: loads `config.yaml` with paths resolved from the repo root and injects credentials from `DEVICE_USERNAME` / `DEVICE_PASSWORD` (or prompts)
 
 ## Commands
 
 ```bash
 python -m venv .venv && . .venv/bin/activate
-pip install -r requirements.txt
-export DEVICE_PASSWORD='...'          # after fixing blocker 2
-python scripts/backup_configs.py      # run from the repo root: paths in config.yaml are relative
-python scripts/compliance_check.py [reports/compliance.csv]
+pip install -r requirements-dev.txt         # runtime deps + pytest + ruff
+pytest -q                                   # offline tests, Netmiko mocked
+ruff check scripts tests && ruff format --check scripts tests
+export DEVICE_USERNAME=admin DEVICE_PASSWORD='...'
+python scripts/backup_configs.py
+python scripts/compliance_check.py --report reports/compliance.csv
 ```
+
+CI (`.github/workflows/ci.yml`) runs ruff and pytest on every pull request.
 
 ## Layout
 
 ```
-config.yaml                 Nornir config (needs the v3 fix above)
+config.yaml                 Nornir 3 config: threaded runner (10 workers), SimpleInventory, logging to logs/nornir.log
 inventory/hosts.yaml        4 example devices on 192.168.x.x (lab addresses)
-inventory/groups.yaml       platform/credential groups (cisco_ios, cisco_nxos) and role groups (core, distribution, access)
-scripts/                    backup_configs.py, compliance_check.py
+inventory/groups.yaml       platform groups (cisco_ios, cisco_nxos: platform + port) and role groups (core, distribution, access)
+scripts/                    common.py, backup_configs.py, compliance_check.py
 templates/baseline_policy.yaml   compliance checks
-requirements.txt            netmiko, nornir, nornir-netmiko, nornir-utils, pyyaml, jinja2, rich (unpinned minimums)
+tests/test_scripts.py       offline tests
+ruff.toml                   lint config (line length 110; scripts' modules are first-party)
 ```
 
 ## Rules for agents
 
-- Scripts connect to real network devices. Never run them against an inventory you did not create for testing unless the user asks; prefer read-only `show` commands.
-- Never put real passwords, enable secrets or SNMP communities in inventory files, policies or tests.
-- `backups/`, `reports/` and `logs/` hold device configs (which contain secrets); they are generated output and must not be committed.
-- Keep scripts runnable from the repo root.
+- Scripts connect to real network devices. Never run them against an inventory you did not create for testing unless the user asks; keep commands read-only.
+- Never put usernames, passwords, enable secrets or SNMP communities in inventory files, policies or tests. Credentials come only from `init_nornir()`.
+- New scripts must use `common.init_nornir()` and repo-root paths (`common.REPO_ROOT`), so they work from any directory.
+- `backups/`, `reports/` and `logs/` hold device output (configs contain secrets); they are gitignored and must stay that way.
+- Every behavior change gets an offline test (mock `netmiko_send_command` in the script's module namespace).
 
 ## Docs
 
